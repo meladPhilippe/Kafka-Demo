@@ -1,0 +1,78 @@
+# docker-compose.kraft.yml
+version: '3.8'
+
+services:
+  kafka:
+    image: bitnami/kafka:latest
+    container_name: kafka-standalone
+    ports:
+      - "9092:9092"   # Internal Kafka (for apps inside docker network)
+      - "29092:29092" # External Kafka (for apps outside docker network like your local machine)
+    environment:
+      - KAFKA_CFG_NODE_ID=0
+      - KAFKA_CFG_PROCESS_ROLES=controller,broker
+      - KAFKA_CFG_LISTENERS=INTERNAL://kafka-standalone:9092,EXTERNAL://0.0.0.0:29092,CONTROLLER://kafka-standalone:9093
+      - KAFKA_CFG_ADVERTISED_LISTENERS=INTERNAL://kafka-standalone:9092,EXTERNAL://localhost:29092
+      - KAFKA_CFG_LISTENER_SECURITY_PROTOCOL_MAP=CONTROLLER:PLAINTEXT,INTERNAL:PLAINTEXT,EXTERNAL:PLAINTEXT
+      - KAFKA_CFG_CONTROLLER_QUORUM_VOTERS=0@kafka-standalone:9093
+      - KAFKA_CFG_CONTROLLER_LISTENER_NAMES=CONTROLLER
+      - KAFKA_CFG_INTER_BROKER_LISTENER_NAME=INTERNAL
+      - ALLOW_PLAINTEXT_LISTENER=yes
+      - KAFKA_AUTO_CREATE_TOPICS_ENABLE=true  # Auto-create topics
+
+    networks:
+      - kafkanet
+
+  schema-registry:
+    image: confluentinc/cp-schema-registry:latest
+    container_name: schema-registry
+    ports:
+      - "8082:8081"
+    environment:
+      - SCHEMA_REGISTRY_HOST_NAME=schema-registry
+      - SCHEMA_REGISTRY_KAFKASTORE_BOOTSTRAP_SERVERS=PLAINTEXT://kafka-standalone:9092
+      - SCHEMA_REGISTRY_LISTENERS=http://0.0.0.0:8081
+      - SCHEMA_REGISTRY_LISTENER_SECURITY_PROTOCOL=PLAINTEXT
+
+    depends_on:
+      - kafka
+    networks:
+      - kafkanet
+
+  kafka-ui:
+    image: provectuslabs/kafka-ui:latest
+    container_name: kafka-ui
+    ports:
+      - "8080:8080"
+    environment:
+      - KAFKA_CLUSTERS_0_NAME=local
+      - KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS=kafka-standalone:9092
+      - KAFKA_CLUSTERS_0_SCHEMAREGISTRY=http://schema-registry:8081
+    depends_on:
+      - kafka
+      - schema-registry
+    networks:
+      - kafkanet
+  
+  producerapp:
+    build:
+      context: ./KafkaProducer
+    depends_on:
+      - kafka
+      - schema-registry
+    networks:
+      - kafkanet
+
+  consumerapp:
+    build:
+      context: ./KafkaConsumer
+    depends_on:
+      - kafka
+      - schema-registry
+    networks:
+      - kafkanet
+
+networks:
+  kafkanet:
+    driver: bridge
+

@@ -1,0 +1,3 @@
+docker exec kafka-standalone kafka-topics.sh --create --topic Melad --bootstrap-server localhost:29094 --partitions 3 --replication-factor 1
+
+
